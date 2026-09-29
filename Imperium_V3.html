@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Imperium — V3</title>
+<style>
+:root{--bg:#101216;--panel:#191c22;--panel2:#20242c;--text:#eee;--muted:#aab0bb;--gold:#d7ad55;--red:#d45b5b;--green:#62c174;--blue:#5d9fe8}
+*{box-sizing:border-box} body{margin:0;background:linear-gradient(135deg,#0e1014,#171a21);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:14px 16px;background:#0b0d11;position:sticky;top:0;z-index:5;border-bottom:1px solid #30343d}
+h1{margin:0;font-size:22px;color:var(--gold)} .sub{font-size:12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.stat{background:var(--panel);padding:8px;border-radius:9px;text-align:center;font-size:12px}.stat b{display:block;font-size:15px}
+main{padding:12px;max-width:1100px;margin:auto}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:10px}.panel{background:var(--panel);border:1px solid #30343d;border-radius:12px;padding:11px;margin-bottom:10px}.panel h2{font-size:15px;margin:0 0 9px;color:#f0d18a}
+#map{width:100%;height:430px;background:#0b1015;border-radius:10px;display:block;border:1px solid #30343d}.province{cursor:pointer;stroke:#111;stroke-width:2}.province:hover{filter:brightness(1.18)}.label{fill:white;font-size:10px;text-anchor:middle;pointer-events:none}.enemy{fill:#713f42}.rome{fill:#7c6230}.neutral{fill:#40566a}.ally{fill:#406848}
+button{border:0;background:#303844;color:#fff;border-radius:8px;padding:8px 10px;margin:3px;cursor:pointer;font-weight:600}button.primary{background:#8e6b25}button.danger{background:#71383b}button.good{background:#315c3c}
+button:active{transform:scale(.98)}select,input{width:100%;background:#101319;color:#fff;border:1px solid #3b414b;border-radius:8px;padding:9px;margin:4px 0}
+.row{display:flex;gap:6px}.row>*{flex:1}.small{font-size:12px;color:var(--muted)}#log{height:190px;overflow:auto;background:#0d1015;border-radius:8px;padding:8px;font-size:12px;line-height:1.45}.logline{padding:3px 0;border-bottom:1px solid #1e232b}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{text-align:left;padding:5px;border-bottom:1px solid #2b3038}th{color:#d7ad55}
+.command{font-size:14px!important}.tip{background:#252a32;padding:7px;border-radius:7px;margin:6px 0;font-size:11px;color:#c7ccd4}
+@media(max-width:760px){.grid{grid-template-columns:1fr}#map{height:350px}.stats{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header>
+<h1>IMPERIUM — V3</h1><div class="sub">Campagne stratégique romaine • 117 apr. J.-C.</div>
+<div class="stats">
+<div class="stat">Trésor<b id="money">—</b></div><div class="stat">Armée<b id="army">—</b></div><div class="stat">Population<b id="pop">—</b></div>
+<div class="stat">Stabilité<b id="stab">—</b></div><div class="stat">Prestige<b id="prestige">—</b></div><div class="stat">Tour<b id="turn">—</b></div>
+</div>
+</header>
+<main>
+<div class="grid">
+<section>
+<div class="panel"><h2>Carte de l'Empire</h2><svg id="map" viewBox="0 0 700 430"></svg>
+<div class="tip">Touchez une province pour la sélectionner. Les provinces romaines sont dorées.</div></div>
+<div class="panel">
+<h2>Province sélectionnée</h2><div id="provinceInfo" class="small">Sélectionne une province.</div>
+<div class="row"><button onclick="invest()">Investir</button><button onclick="fortify()">Fortifier</button><button onclick="raiseTax()">Impôts</button></div>
+<div class="row"><button onclick="recruit('legion')">+ légionnaires</button><button onclick="recruit('aux')">+ auxiliaires</button><button onclick="recruit('cav')">+ cavalerie</button></div>
+<div class="row"><button onclick="recruit('archer')">+ archers</button><button onclick="recruit('engineer')">+ ingénieurs</button><button class="danger" onclick="attack()">Attaquer</button></div>
+</div>
+<div class="panel">
+<h2>Commandement libre</h2>
+<input id="cmd" class="command" placeholder='Ex: "recrute 5000 légionnaires en Italia"'>
+<button class="primary" style="width:100%" onclick="command()">Exécuter l'ordre</button>
+<div class="tip">Tu peux écrire des ordres comme : « envahis Dacia », « investis en Gallia », « augmente les impôts », « négocie avec Parthie », « recrute 8000 cavaliers », « finis le tour ».</div>
+</div>
+</section>
+<section>
+<div class="panel"><h2>Forces militaires</h2><div id="units"></div></div>
+<div class="panel"><h2>Diplomatie</h2><div id="diplomacy"></div></div>
+<div class="panel"><h2>Factions</h2><div id="factions"></div></div>
+<div class="panel"><h2>Chronique impériale</h2><div id="log"></div></div>
+<div class="panel"><button class="good" onclick="save()">Sauvegarder</button><button onclick="load()">Charger</button><button class="danger" onclick="resetGame()">Nouvelle campagne</button></div>
+</section>
+</div>
+</main>
+<script>
+const provinces=[
+['Britannia',65,85,'rome',3,1,4],['Germania',170,75,'enemy',5,2,6],['Gallia',105,160,'rome',8,5,10],
+['Hispania',55,265,'rome',6,4,8],['Italia',250,215,'rome',12,8,14],['Africa',235,335,'rome',7,5,10],
+['Dacia',345,115,'enemy',4,2,6],['Graecia',350,235,'rome',7,5,9],['Asia',470,220,'rome',10,7,12],
+['Syria',545,205,'rome',9,6,11],['Aegyptus',510,325,'rome',8,6,12],['Parthia',625,175,'enemy',10,8,13]
+];
+const neighbors={Britannia:['Gallia'],Germania:['Gallia','Dacia'],Gallia:['Britannia','Germania','Hispania','Italia'],Hispania:['Gallia'],
+Italia:['Gallia','Graecia','Africa','Dacia'],Africa:['Italia','Aegyptus'],Dacia:['Germania','Italia','Graecia','Parthia'],Graecia:['Italia','Dacia','Asia'],
+Asia:['Graecia','Syria','Parthia'],Syria:['Asia','Aegyptus','Parthia'],Aegyptus:['Africa','Syria'],Parthia:['Dacia','Asia','Syria']};
+const units={legion:{name:'Légionnaires',cost:2,power:1.35},aux:{name:'Auxiliaires',cost:1,power:.8},cav:{name:'Cavalerie',cost:4,power:2.1},archer:{name:'Archers',cost:2,power:1.15},engineer:{name:'Ingénieurs',cost:3,power:.45}};
+let state={turn:1,money:1800,pop:38000000,stab:78,prestige:72,selected:'Italia',
+units:{legion:110000,aux:80000,cav:30000,archer:20000,engineer:10000},
+prov:{},dip:{Parthia:-35,Germania:-15,Dacia:-20,Britannia:5,Armenia:20,Egypt:25,Nabataea:15},
+factions:[
+{name:'Parthie',power:145000,wealth:1100,rel:-35,aggr:75,territory:'Parthia'}, {name:'Confédérations germaniques',power:120000,wealth:800,rel:-15,aggr:70,territory:'Germania'},
+{name:'Dacie',power:70000,wealth:450,rel:-20,aggr:60,territory:'Dacia'}, {name:'Britons',power:65000,wealth:500,rel:5,aggr:35,territory:'Britannia'},
+{name:'Arménie',power:55000,wealth:600,rel:20,aggr:25,territory:'—'}, {name:'Nabatéens',power:45000,wealth:700,rel:15,aggr:20,territory:'—'}
+],history:[]};
+provinces.forEach(p=>state.prov[p[0]]={owner:p[3]==='rome'?'Rome':p[0],wealth:p[4],pop:p[5]*1000000,fort:p[6],tax:10,loyal:70});
+function $(id){return document.getElementById(id)}
+function fmt(n){return Math.round(n).toLocaleString('fr-FR')}
+function log(s){state.history.unshift(`Tour ${state.turn}: ${s}`);state.history=state.history.slice(0,80);$('log').innerHTML=state.history.map(x=>`<div class="logline">${x}</div>`).join('')}
+function render(){
+$('money').textContent=fmt(state.money)+' den.';$('army').textContent=fmt(totalArmy());$('pop').textContent=(state.pop/1000000).toFixed(1)+' M';
+$('stab').textContent=Math.round(state.stab)+'%';$('prestige').textContent=Math.round(state.prestige);$('turn').textContent=state.turn;
+drawMap(); provinceInfo(); units(); diplomacy(); factions();
+}
+function totalArmy(){return Object.values(state.units).reduce((a,b)=>a+b,0)}
+function drawMap(){
+let svg=$('map');svg.innerHTML='';
+provinces.forEach(p=>{let x=p[1],y=p[2],owner=state.prov[p[0]].owner, cls=owner==='Rome'?'rome':(owner===p[0]?'enemy':'neutral');
+let el=document.createElementNS('http://www.w3.org/2000/svg','g');let poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+poly.setAttribute('points',`${x},${y} ${x+65},${y-20} ${x+92},${y+25} ${x+55},${y+58} ${x-15},${y+35}`);poly.setAttribute('class','province '+cls);
+poly.onclick=()=>{state.selected=p[0];render()};el.appendChild(poly);
+let t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',x+37);t.setAttribute('y',y+23);t.setAttribute('class','label');t.textContent=p[0];el.appendChild(t);svg.appendChild(el)});
+}
+function provinceInfo(){
+let p=state.prov[state.selected];if(!p){$('provinceInfo').textContent='—';return}
+$('provinceInfo').innerHTML=`<b>${state.selected}</b> — contrôle : ${p.owner}<br>Richesse : ${p.wealth} • Population : ${(p.pop/1000000).toFixed(1)} M • Fortifications : ${p.fort}<br>Loyauté : ${p.loyal}% • Impôt : ${p.tax}%`;
+}
+function units(){
+$('units').innerHTML='<table><tr><th>Unité</th><th>Effectif</th><th>Puissance</th></tr>'+Object.entries(units).map(([k,u])=>`<tr><td>${u.name}</td><td>${fmt(state.units[k])}</td><td>${(state.units[k]*u.power/1000).toFixed(0)}</td></tr>`).join('')+'</table>';
+}
+function diplomacy(){
+$('diplomacy').innerHTML=Object.entries(state.dip).map(([n,r])=>`<div style="display:flex;justify-content:space-between;padding:5px"><span>${n}</span><b>${r>50?'Allié':r>0?'Amical':r>-40?'Tendu':'Hostile'} (${r})</b></div>`).join('');
+}
+function factions(){
+$('factions').innerHTML='<table><tr><th>Faction</th><th>Armée</th><th>Relations</th><th>Agressivité</th></tr>'+state.factions.map(f=>`<tr><td>${f.name}</td><td>${fmt(f.power)}</td><td>${f.rel}</td><td>${f.aggr}</td></tr>`).join('')+'</table>';
+}
+function invest(){let p=state.prov[state.selected];if(state.money<150)return log('Trésor insuffisant.');state.money-=150;p.wealth+=2;p.loyal+=2;state.pop+=50000;log(`Investissements lancés en ${state.selected}.`);render()}
+function fortify(){let p=state.prov[state.selected];if(p.owner!=='Rome')return log('Cette province n’est pas sous contrôle romain.');if(state.money<120)return log('Trésor insuffisant.');state.money-=120;p.fort+=2;log(`Les défenses de ${state.selected} sont renforcées.`);render()}
+function raiseTax(){let p=state.prov[state.selected];p.tax=Math.min(25,p.tax+2);state.stab-=3;log(`Les impôts augmentent en ${state.selected}. Les revenus montent, mais la population proteste.`);render()}
+function recruit(type,n=5000){let p=state.prov[state.selected];if(p.owner!=='Rome')return log('Recrutement impossible : province non romaine.');let u=units[type];let cost=n*u.cost;if(state.money<cost)return log('Pas assez de trésor.');state.money-=cost;state.units[type]+=n;state.stab-=Math.max(0,n/300000);log(`${fmt(n)} ${u.name.toLowerCase()} recrutés en ${state.selected} pour ${fmt(cost)} deniers.`);render()}
+function attack(target=state.selected){
+let p=state.prov[target];if(!p)return;if(p.owner==='Rome')return log('Cette province est déjà romaine.');
+let enemy=state.factions.find(f=>f.territory===target);let my=armyPower(), ep=enemy?enemy.power*(.75+Math.random()*.6):70000;
+if(!neighbors[state.selected]?.includes(target) && target!==state.selected)return log('Cette cible n’est pas directement accessible depuis la province sélectionnée.');
+let fort=p.fort;let chance=my/(my+ep*1.1+fort*6000);let roll=Math.random();
+state.prestige+=roll<chance?8:-5;state.stab-=roll<chance?2:6;state.money-=120;
+if(roll<chance){p.owner='Rome';p.loyal=48;p.fort=Math.max(0,p.fort-2);if(enemy)enemy.power=Math.round(enemy.power*.72);log(`Victoire romaine : ${target} tombe sous contrôle impérial. Votre prestige augmente.`)}
+else{Object.keys(state.units).forEach(k=>state.units[k]=Math.round(state.units[k]*(.9+Math.random()*.04)));log(`Défaite à ${target}. L’armée subit de lourdes pertes et l’ennemi tient ses positions.`)}
+render()
+}
+function armyPower(){return Object.entries(state.units).reduce((s,[k,n])=>s+n*units[k].power,0)}
+function negotiate(name){
+let key=Object.keys(state.dip).find(x=>x.toLowerCase().includes(name.toLowerCase()));if(!key)return log('Faction inconnue.');state.dip[key]=Math.min(100,state.dip[key]+12);let f=state.factions.find(x=>x.name.includes(key)||x.name.toLowerCase().includes(name.toLowerCase()));if(f)f.rel=state.dip[key];log(`Des émissaires négocient avec ${key}. Les relations s’améliorent.`);render()
+}
+function endTurn(){
+let income=0;Object.entries(state.prov).forEach(([n,p])=>{if(p.owner==='Rome'){income+=p.wealth*(p.tax/10);p.loyal+=p.loyal<70?1:0;if(p.loyal<35&&Math.random()<.15){p.owner=n;state.stab-=8;log(`Révolte : ${n} échappe temporairement au contrôle de Rome.`)}}});
+income=Math.round(income);state.money+=income;state.pop+=Math.round(state.pop*.0015);state.stab=Math.max(0,Math.min(100,state.stab+.5));state.prestige=Math.max(0,state.prestige+.2);
+state.factions.forEach(f=>{f.wealth+=Math.round(f.wealth*.03);if(f.aggr>55&&Math.random()<.13){let target=f.territory;if(target&&state.prov[target]?.owner==='Rome'){log(`${f.name} mobilise des forces autour de ${target}.`);state.stab-=2}}if(f.rel<-60&&Math.random()<.08)log(`Les relations avec ${f.name} se dégradent fortement.`)});
+state.turn++;log(`Le tour s’achève. Revenus impériaux : ${fmt(income)} deniers.`);render()
+}
+function command(){
+let s=$('cmd').value.trim().toLowerCase();if(!s)return;
+let num=(s.match(/(\d[\d\s.]*)/)||[])[1];num=num?parseInt(num.replace(/[^\d]/g,'')):5000;
+let found=provinces.map(p=>p[0]).find(n=>s.includes(n.toLowerCase()));
+if(/finis|termine|tour suivant|passe/.test(s)){endTurn()}
+else if(/recrut/.test(s)){let type=/caval/.test(s)?'cav':/arch/.test(s)?'archer':/aux/.test(s)?'aux':/ingén/.test(s)?'engineer':'legion';if(found)state.selected=found;recruit(type,Math.min(num,100000))}
+else if(/invest/.test(s)){if(found)state.selected=found;invest()}
+else if(/fortif/.test(s)){if(found)state.selected=found;fortify()}
+else if(/impôt|taxe/.test(s)){if(found)state.selected=found;raiseTax()}
+else if(/attaq|envahi|envahis|conqu/.test(s)){let target=found||state.selected;attack(target)}
+else if(/négoci|diplom/.test(s)){let n=found||Object.keys(state.dip).find(k=>s.includes(k.toLowerCase()));negotiate(n||'')}
+else log('Ordre non compris. Essaie : recrute, investis, fortifie, attaque, négocie ou finis le tour.');
+$('cmd').value=''
+}
+function save(){localStorage.setItem('imperiumV3',JSON.stringify(state));log('Campagne sauvegardée sur cet appareil.')}
+function load(){let s=localStorage.getItem('imperiumV3');if(!s)return log('Aucune sauvegarde trouvée.');state=JSON.parse(s);log('Campagne chargée.');render()}
+function resetGame(){if(confirm('Nouvelle campagne ?')){localStorage.removeItem('imperiumV3');location.reload()}}
+log('L’Empereur prend le pouvoir. Les frontières sont calmes… pour le moment.');render();
+</script>
+</body></html>
